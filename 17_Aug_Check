@@ -1,0 +1,5 @@
+Tonight at 23:50, cron should fire and this time actually succeed in writing to gold_myr_ohlc.csv. Tomorrow, check:
+
+cd /Users/adriannandu/Desktop/gold_ohlc
+cat cron.log
+cat gold_myr_ohlc.csv
