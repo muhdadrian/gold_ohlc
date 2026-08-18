@@ -1,7 +1,8 @@
 """
 Gold Price Tracker (MYR per gram) — Personal Use
 ====================================================
-Polls the Metals.Dev API during Bursa's trading session (8:30am - 11:50pm MYT)
+Polls the Metals.Dev API twice a day, Monday-Friday, to match Bursa
+Malaysia's trading hours (8:30am open, 5:00pm close, MYT)
 and builds a daily OHLC row:
     Open  = first price observed after market open
     High  = highest price observed during the session
@@ -24,9 +25,10 @@ SETUP
 4b. Cron / Task Scheduler mode (recommended to stay within the free
     100 requests/month quota — see note at the bottom):
        python gold_myr_tracker.py --once
-    Schedule this to run a few fixed times a day, e.g. 08:30, 14:00,
-    20:00, 23:50 MYT. Running state (today's Open/High/Low so far) is
-    saved to gold_myr_day_state.json between runs and finalized into
+    Schedule this to run twice a day, Monday-Friday, matching Bursa
+    Malaysia trading hours: 08:30 (Open) and 17:00 (Close). Running
+    state (today's Open/High/Low so far) is saved to
+    gold_myr_day_state.json between runs and finalized into
     gold_myr_ohlc.csv once a poll lands at/after market close.
 """
 
@@ -46,15 +48,16 @@ from datetime import datetime, time as dtime
 API_KEY = os.environ.get("METALS_DEV_API_KEY")
 GRAMS_PER_TROY_OZ = 31.1035
 
-MARKET_OPEN = dtime(8, 30)             # Bursa Gold Dinar session open
-MARKET_CLOSE = dtime(23, 50)           # Bursa Gold Dinar official session close
+MARKET_OPEN = dtime(8, 30)             # Bursa Malaysia trading session open
+MARKET_CLOSE = dtime(17, 0)            # Bursa Malaysia trading session close
                                         # (this is the trigger used to finalize
                                         # and write the day's CSV row)
-POLL_WINDOW_END = dtime(23, 59, 59)    # accept polls up to just before midnight,
-                                        # so a poll that fires a few seconds after
-                                        # the exact 23:50:00 instant (e.g. via cron)
-                                        # is still accepted and still finalizes the
-                                        # day, instead of being skipped entirely.
+POLL_WINDOW_END = dtime(17, 15)        # accept polls up to 17:15, so a poll that
+                                        # fires a few seconds (or, with retries,
+                                        # up to ~40s) after the exact 17:00:00
+                                        # instant is still accepted and still
+                                        # finalizes the day, instead of being
+                                        # skipped entirely.
 
 POLL_INTERVAL_MINUTES = 30             # how often to check price during the day
                                         # (30 min x ~15.5 hr session = ~31 calls/day
@@ -101,7 +104,7 @@ def fetch_gold_price_myr_per_oz(max_retries=4, retry_delay_seconds=10):
     """Fetch current gold spot price in MYR per troy ounce.
 
     Retries a few times with a short delay in between. This matters most
-    for the market-close poll (run via cron at 23:50): if the Mac just
+    for the market-close poll (run via cron at 17:00): if the Mac just
     woke from a display-sleep state, Wi-Fi can take a few seconds to
     reconnect, causing a DNS/connection failure on the very first
     attempt. Without a retry, that would cost the entire day's row.
@@ -220,10 +223,9 @@ def main():
     args = parser.parse_args()
 
     if args.once:
-        # One-shot mode: call this a few fixed times a day via cron, e.g.
-        # 08:30, 14:00, 20:00, 23:50 -> ~4 calls/day -> ~120/month.
-        # Open/Close only need one call each; call it more often only if
-        # you also want decent High/Low sampling.
+        # One-shot mode: called via cron twice a day, Monday-Friday, to
+        # match Bursa Malaysia trading hours - 08:30 (Open) and 17:00
+        # (Close) -> 2 calls/day -> ~44 calls/month (weekdays only).
         poll_once()
         return
 
@@ -246,16 +248,15 @@ if __name__ == "__main__":
 # -------------------------------------------------------------------
 # NOTE ON FREE TIER BUDGET (100 requests/month on Metals.Dev free plan)
 # -------------------------------------------------------------------
-# Polling every 30 min for a ~15.5 hr session = ~31 calls/day, which
-# would burn through 100 calls in about 3 days. For sustainable personal
-# use, either:
-#   (a) Increase POLL_INTERVAL_MINUTES to something larger, e.g. 240
-#       (4 hours) -> ~4-5 calls/day -> ~120-150/month (still tight), or
-#   (b) Only run this script on days you actually want a candle
-#       (e.g. via cron at 08:30, 14:00, 20:00, 23:50 = 4 calls/day
-#       -> ~120/month), or
-#   (c) Upgrade to Metals.Dev's cheapest paid tier if you want denser
-#       intraday sampling (their paid plans start very cheap for
-#       personal-scale usage).
-# The Open and Close only need ONE call each per day; it's the
-# High/Low sampling in between that eats your quota fastest.
+# Current setup: cron runs this script twice a day (--once), Monday-
+# Friday only, at 08:30 (Open) and 17:00 (Close), matching Bursa
+# Malaysia trading hours. That's 2 calls/day x ~22 trading days/month
+# = ~44 calls/month - comfortably within the 100/month free quota.
+#
+# Trade-off: with only two polls a day, High and Low simply mirror
+# whichever of Open/Close is larger/smaller - they don't reflect true
+# intraday price movement. If you want more realistic High/Low values,
+# add extra cron entries during the day (e.g. midday) at the cost of
+# more API calls per month. Continuous mode (POLL_INTERVAL_MINUTES,
+# no --once flag) is not used in the current setup and would consume
+# the free quota within days if left running all day.
