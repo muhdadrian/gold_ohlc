@@ -1,0 +1,10 @@
+.venv/
+gold_myr_day_state.json
+gold_myr_ohlc.csv
+cron.log
+__pycache__/
+cron.log
+gold_myr_day_state.json
+gold_myr_ohlc.csv
+.venv/
+__pycache__/

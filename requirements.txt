@@ -2,3 +2,4 @@ requests
 schedule
 pandas
 plotly
+dash
