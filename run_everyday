@@ -2,3 +2,16 @@ cd /Users/adriannandu/Desktop/gold_ohlc
 cat cron.log
 cat gold_myr_ohlc.csv
 cat gold_myr_day_state.json
+
+-------------------
+
+python plot_gold_candlestick.py
+python gold_chart.py
+
+-------------
+
+requests
+schedule
+pandas
+plotly
+dash
